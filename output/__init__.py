@@ -1,0 +1,3 @@
+"""
+Output management package.
+"""

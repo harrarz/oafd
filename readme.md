@@ -2,7 +2,7 @@
 
 ## 1. Contexte et objectifs
 
-Ce travail porte sur l'application des algorithmes évolutionnaires multi-objectifs au problème de clustering, en utilisant deux critères conflictuels pour mesurer la qualité des partitions :
+Ce TP porte sur l'application des algorithmes évolutionnaires multi-objectifs au problème de clustering, en utilisant deux critères conflictuels pour mesurer la qualité des partitions :
 
 - Le WCSS (Within-Cluster Sum of Squares), qui mesure la compacité intra-cluster
 - La connectivité, qui évalue la préservation des relations de voisinage
