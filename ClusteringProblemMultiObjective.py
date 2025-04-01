@@ -10,137 +10,159 @@ class ClusteringProblemMultiObjective(Problem[FloatSolution]):
     Multi-objective clustering problem implementation for jMetal framework.
     Optimizes both WCSS (Within-Cluster Sum of Squares) and Connectivity measures.
     """
-    
-    def __init__(self, X, n_clusters):
+
+    def __init__(self, X: np.ndarray, n_clusters: int):
         """
         Initialize the clustering problem with dataset and desired number of clusters.
-        
+
         Args:
             X: Input data matrix of shape (n_samples, n_features)
             n_clusters: Number of clusters to form
         """
         super().__init__()
-        
-        # Store input data and problem parameters
+
+        # Store input data
         self.X = X
+        self.n_samples, self.n_features = X.shape
         self.n_clusters = n_clusters
-        self.n_features = X.shape[1]
-        
+
         # Define problem dimensions
-        self.number_of_variables = n_clusters * self.n_features
-        self.number_of_objectives = 2
-        self.number_of_constraints = 0
-        
-        # Determine bounds for each variable (centroids coordinates)
-        self.lower_bound = [float(np.min(X[:, i % self.n_features])) for i in range(self.number_of_variables)]
-        self.upper_bound = [float(np.max(X[:, i % self.n_features])) for i in range(self.number_of_variables)]
+        self._number_of_variables = self.n_clusters * self.n_features
+        self._number_of_objectives = 2
+        self._number_of_constraints = 0
+
+        # Determine bounds for each variable (all centroid coordinates)
+        self._lower_bound = []
+        self._upper_bound = []
+        for i in range(self._number_of_variables):
+            feature_idx = i % self.n_features
+            self._lower_bound.append(float(np.min(X[:, feature_idx])))
+            self._upper_bound.append(float(np.max(X[:, feature_idx])))
 
     def number_of_variables(self) -> int:
-        return self.number_of_variables
-        
+        return self._number_of_variables
+
     def number_of_objectives(self) -> int:
-        return self.number_of_objectives
-        
+        return self._number_of_objectives
+
     def number_of_constraints(self) -> int:
-        return self.number_of_constraints
-        
+        return self._number_of_constraints
+
     def name(self) -> str:
         return "ClusteringProblemMultiObjective"
 
+    def create_solution(self) -> FloatSolution:
+        """
+        Create a random initial solution (random centroids).
+
+        Returns:
+            A new random FloatSolution.
+        """
+        new_solution = FloatSolution(
+            self._lower_bound,
+            self._upper_bound,
+            self._number_of_objectives,
+            self._number_of_constraints
+        )
+
+        # Initialize with random values within bounds
+        new_solution.variables = [
+            np.random.uniform(self._lower_bound[i], self._upper_bound[i])
+            for i in range(self._number_of_variables)
+        ]
+
+        return new_solution
+
     def evaluate(self, solution: FloatSolution) -> FloatSolution:
         """
-        Evaluate a candidate solution against the two objectives.
-        
+        Evaluate a candidate solution against the two objectives:
+            1) WCSS (Within-Cluster Sum of Squares)
+            2) Connectivity
+
         Args:
-            solution: Candidate cluster centroids encoded as a FloatSolution
-            
+            solution: Candidate cluster centroids encoded as a FloatSolution.
+
         Returns:
-            The solution with calculated objective values
+            The solution with updated objective values.
         """
         # Transform solution variables into cluster centroids
         centers = self._decode_centroids(solution.variables)
-        
+
         # Assign data points to nearest centroids
         labels = self._assign_points_to_clusters(centers)
-        
+
         # Calculate both objective functions
         wcss_value = self._calculate_wcss(labels, centers)
-        conn_value = self._calculate_connectivity(labels)
-        
+        connectivity_value = self._calculate_connectivity(labels)
+
         # Update solution objectives
         solution.objectives[0] = wcss_value
-        solution.objectives[1] = conn_value
-        
+        solution.objectives[1] = connectivity_value
+
         return solution
-    
-    def _decode_centroids(self, variables):
-        """Convert flat variables array to matrix of centroids."""
+
+    def _decode_centroids(self, variables: list) -> np.ndarray:
+        """
+        Convert a flat list of variables to a matrix of centroids of shape (n_clusters, n_features).
+        """
         return np.array(variables).reshape(self.n_clusters, self.n_features)
-    
-    def _assign_points_to_clusters(self, centers):
-        """Assign each data point to its nearest centroid."""
-        labels = []
-        for point in self.X:
-            distances = np.linalg.norm(point - centers, axis=1)
-            labels.append(np.argmin(distances))
-        return np.array(labels)
-    
-    def _calculate_wcss(self, labels, centers):
-        """Calculate Within-Cluster Sum of Squares."""
-        total_wcss = 0.0
-        for i in range(self.n_clusters):
-            cluster_points = self.X[labels == i]
-            if len(cluster_points) > 0:
-                dists = pairwise_distances(cluster_points, [centers[i]], metric='euclidean')
-                total_wcss += np.sum(dists)
-        return total_wcss
-    
-    def _calculate_connectivity(self, labels, L=10):
+
+    def _assign_points_to_clusters(self, centers: np.ndarray) -> np.ndarray:
         """
-        Calculate connectivity measure based on nearest neighbors.
-        
+        Assign each data point in X to its nearest centroid.
+        """
+        # Méthode vectorisée pour éviter une boucle supplémentaire
+        distances = pairwise_distances(self.X, centers, metric='euclidean')
+        return np.argmin(distances, axis=1)
+
+    def _calculate_wcss(self, labels: np.ndarray, centers: np.ndarray) -> float:
+        """
+        Calculate Within-Cluster Sum of Squares (WCSS).
+
         Args:
-            labels: Cluster assignments for each data point
-            L: Number of nearest neighbors to consider
-            
+            labels: Assigned cluster for each data point.
+            centers: Cluster centers.
+
         Returns:
-            Connectivity value (lower is better)
+            Sum of distances between each point and son centroïde assigné.
         """
-        N = self.X.shape[0]
-        
+        total_wcss = 0.0
+        # Distances entre tous les points et tous les centres
+        distances = pairwise_distances(self.X, centers, metric='euclidean')
+
+        # Additionner les distances point-centroïde selon l’étiquette
+        for i in range(self.n_clusters):
+            cluster_indices = (labels == i)
+            total_wcss += np.sum(distances[cluster_indices, i])
+
+        return total_wcss
+
+    def _calculate_connectivity(self, labels: np.ndarray, L: int = 10) -> float:
+        """
+        Calculate the connectivity measure based on nearest neighbors.
+
+        Args:
+            labels: Cluster assignments for each data point.
+            L: Number of nearest neighbors to consider.
+
+        Returns:
+            Connectivity value (lower is better).
+        """
+        N = self.n_samples
+
         # Find L nearest neighbors for each point
         n_neighbors = min(L + 1, N)
         neigh = NearestNeighbors(n_neighbors=n_neighbors, metric='euclidean')
         neigh.fit(self.X)
-        neighbors = neigh.kneighbors(self.X, return_distance=False)[:, 1:]  # Skip self as neighbor
-        
+
+        # On retire l’indice du point lui-même (voisin 0)
+        neighbors = neigh.kneighbors(self.X, return_distance=False)[:, 1:]
+
         # Calculate connectivity
         connectivity = 0.0
         for i in range(N):
             for j, neighbor_idx in enumerate(neighbors[i]):
                 if labels[i] != labels[neighbor_idx]:
-                    connectivity += 1 / (j + 1)  # Penalty decreases with neighbor distance
-                    
-        return connectivity
+                    connectivity += 1.0 / (j + 1)
 
-    def create_solution(self) -> FloatSolution:
-        """
-        Create a random initial solution (random centroids).
-        
-        Returns:
-            A new random solution
-        """
-        new_solution = FloatSolution(
-            self.lower_bound, 
-            self.upper_bound,
-            self.number_of_objectives,
-            self.number_of_constraints
-        )
-        
-        # Initialize with random values within bounds
-        new_solution.variables = [
-            np.random.uniform(self.lower_bound[i], self.upper_bound[i])
-            for i in range(self.number_of_variables)
-        ]
-        
-        return new_solution
+        return connectivity
