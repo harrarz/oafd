@@ -613,7 +613,6 @@ def run_kmeans_benchmarks(X, n_runs=10):
 def run_experiments_parallel(X, n_runs=10, max_workers=None):
     """Run all experiments in parallel, with individual runs as the unit of parallelism"""
     
-    # Create a list of all individual runs
     all_runs = []
     for algo_label, (_, config_dict) in ALGORITHM_REGISTRY.items():
         for config_label, config in config_dict.items():
@@ -623,31 +622,23 @@ def run_experiments_parallel(X, n_runs=10, max_workers=None):
     total_runs = len(all_runs)
     log_print(f"Preparing to run {total_runs} individual experiment runs with {max_workers} worker threads")
     
-    # Create a result manager for centralized result handling
     result_manager = ResultManager()
     completed = 0
     
-    # Create a partial function with fixed X parameter
     run_func = partial(run_single_experiment_run, X)
     
-    # Use ThreadPoolExecutor to manage worker threads
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all tasks at once
         futures = [
             executor.submit(run_func, algo, config_label, config, run_num)
             for algo, config_label, config, run_num in all_runs
         ]
         
-        # Process results as they complete
         for future in concurrent.futures.as_completed(futures):
             try:
-                # Get the result
                 result = future.result()
                 
-                # Add to the manager
                 result_manager.add_result(result)
                 
-                # Update progress - less frequent updates
                 completed += 1
                 if completed % 5 == 0 or completed == total_runs:
                     log_print(f"Progress: {completed}/{total_runs} runs complete ({completed/total_runs*100:.1f}%)")
@@ -655,7 +646,6 @@ def run_experiments_parallel(X, n_runs=10, max_workers=None):
             except Exception as e:
                 log_print(f"❌ Error in experiment: {e}")
     
-    # Save all results
     log_print("All runs completed, saving final results...")
     result_manager.save_results(X)
     
@@ -842,20 +832,15 @@ def create_comparative_visualizations(all_results):
 
 def main():
     """Main function to run all experiments in parallel"""
-    # Load datasets
     datasets = {
         'iris': load_iris().data,
-        # You can add more datasets here as needed
     }
     
-    # Calculate optimal number of threads
     cpu_count = multiprocessing.cpu_count()
     thread_count = min(cpu_count + 2, 12)
     
-    # Create a dictionary to store all results
     all_results = {}
     
-    # Create CSV file for aggregated results
     os.makedirs("results/summary", exist_ok=True)
     with open("results/summary/algorithm_comparison.csv", 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
@@ -865,30 +850,22 @@ def main():
                          'Silhouette_Mean', 'Silhouette_Std', 'Silhouette_Best',
                          'Hypervolume_Mean', 'Hypervolume_Std'])
     
-    # For each dataset
     for dataset_name, X in datasets.items():
         log_print(f"=== Starting experiments on {dataset_name} dataset ===")
         
-        # Run K-means as a benchmark
         log_print(f"Running K-means benchmarks on {dataset_name}...")
         kmeans_results = run_kmeans_benchmarks(X, n_runs=10)
         
-        # Store the results
         all_results[f'kmeans_{dataset_name}'] = kmeans_results
         
-        # Run the evolutionary algorithms
         log_print(f"Running evolutionary algorithms on {dataset_name}...")
         run_experiments_parallel(X, n_runs=10, max_workers=thread_count)
         
-        # Important: run_experiments_parallel doesn't return anything now since it saves directly to files
-        # We'll mark this dataset as processed
         all_results[f'mo_{dataset_name}'] = {'processed': True}
         
-        # Extract and save summary results to CSV for K-means only
         with open("results/summary/algorithm_comparison.csv", 'a', newline='') as csvfile:
             writer = csv.writer(csvfile)
             
-            # K-means row
             writer.writerow([
                 dataset_name, 'K-means', 'N/A',
                 kmeans_results['mean_wcss'], kmeans_results['std_wcss'], kmeans_results['best_wcss'],
@@ -901,17 +878,13 @@ def main():
 
 
 if __name__ == "__main__":
-    # Create results directory
     os.makedirs("results", exist_ok=True)
     
-    # Record start time
     start_time = datetime.now()
     log_print(f"Starting clustering experiments at {start_time}")
     
-    # Run the main function
     main()
     
-    # Report total execution time
     end_time = datetime.now()
     duration = end_time - start_time
     log_print(f"Experiments completed in {duration.total_seconds()/60:.2f} minutes")

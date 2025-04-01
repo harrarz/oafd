@@ -1,0 +1,2 @@
+Dataset,Algorithm,Config,WCSS_Mean,WCSS_Std,WCSS_Best,Connectivity_Mean,Connectivity_Std,Connectivity_Best,Silhouette_Mean,Silhouette_Std,Silhouette_Best,Hypervolume_Mean,Hypervolume_Std
+iris,K-means,N/A,78.85144142614715,0.0,78.85144142614715,10.091666666666665,0.0,10.091666666666665,0.5528190123564095,0.0,0.5528190123564095,N/A,N/A
